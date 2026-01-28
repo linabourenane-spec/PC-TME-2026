@@ -12,13 +12,21 @@ public class Repeat {
 
 	// Using "new StringBuilder()"
 	public static String repeatDefault(char c, int n) {
-		return null;
-	}
-	
-	// Using "new StringBuilder(n)"
-	public static String repeatCapacity(char c, int n) {
-		return null;
-	}
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+    
+    // Version avec capacité optimisée (évite les redimensionnements)
+    public static String repeatCapacity(char c, int n) {
+        StringBuilder sb = new StringBuilder(n);
+        for (int i = 0; i < n; i++) {
+            sb.append(c);
+        }
+        return sb.toString();
+    }
 	
 	public static void main(String [] args) {
 		{

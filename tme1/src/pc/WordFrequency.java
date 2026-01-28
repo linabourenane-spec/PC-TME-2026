@@ -3,18 +3,41 @@ package pc;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.TreeMap;
 
 public class WordFrequency {
 	
-	private static class WordCount {
-		// TODO : essentiellement un mot et un compteur
+	private static class WordCount implements Comparable<WordCount>{
+			private String mot ;
+			private int cpt;
+			public WordCount (String mot) {
+				this.mot=mot;
+				this.cpt=1;
+			}
+			@Override
+			public int compareTo(WordCount arg) {
+				int j=Integer.compare(arg.cpt,cpt);
+					 
+					if(j==0) {
+						j =mot.compareTo(arg.mot);
+					}
+				return j;
+			}
+			@Override
+			public String toString() {
+				return "WordCount [mot=" + mot + ", cpt=" + cpt + "]";
+			}
+			
+			
+			
 	}
-
     public static void main(String[] args) throws IOException {
         // Allow filename as optional first argument, default to WarAndPeace.txt
         // Optional second argument is mode (e.g., "list" or "listfreq").
@@ -50,11 +73,16 @@ public class WordFrequency {
         } else if (mode.equals("list")) {
             long totalWords = 0;
             List<String> words = new ArrayList<>();
+
         	while (scanner.hasNext()) {
                 String word = cleanWord(scanner.next());
                 if (!word.isEmpty()) {
                     totalWords++;
-                    // TODO : tester si le mot "word" déjà dans "words"
+                    
+                    if (!words.contains(word)){
+                    	words.add(word);
+                    }
+
                     
                 }
             }
@@ -63,23 +91,33 @@ public class WordFrequency {
         } else if (mode.equals("listfreq")) {
         	long totalWords = 0;
             List<WordCount> words = new ArrayList<>();
+            boolean t =false ;
         	while (scanner.hasNext()) {
                 String word = cleanWord(scanner.next());
                 if (!word.isEmpty()) {
                     totalWords++;
-                    // TODO : trouver si le mot est déjà dans "words"
-                    // si oui incrémenter son compteur
-                    // sinon l'ajouter à la liste
+                    for (WordCount w : words) {
+                    		if (w.mot.equals(word)) {
+                    			w.cpt++;
+                    			t=true;
+                    			break;
+                    		}
+                    }
+                    if(!t) {
+                    	WordCount w =new WordCount(word);
+                    	words.add(w);
+                    	
+                    }
+                    t=false;
                 }
             }
         	System.out.println("Total words: " + totalWords);
         	System.out.println("Unique words: " + words.size());
-            // TODO : trier la liste par fréquence décroissante puis ordre alphabétique croissant
-
-        	// puis afficher les 5 mots les plus fréquents avec leur fréquence
-//            for (WordCount wc : words.subList(0, 5)) {
-//				System.out.println(wc.getCount() + " " + wc.getWord());
-//			}
+        	Collections.sort(words);
+        	for (int i=0;i<5;i++) {
+        		System.out.println(words.get(i)+"\n");
+        	}
+        	
         } else if (mode.equals("tree")) {
         	long totalWords = 0;
             Map<String, Integer> map = new TreeMap<>();
@@ -87,11 +125,28 @@ public class WordFrequency {
                 String word = cleanWord(scanner.next());
                 if (!word.isEmpty()) {
                     totalWords++;
-                    // TODO : mettre à jour la map
+                    if (map.get(word)==null) {
+                    	map.put(word,1);
+                    }
+                    else {
+                    	map.put(word,(map.get(word))+1);
+                    }
                 }
             }
+            List<Map.Entry<String,Integer>> l= new ArrayList<>(map.entrySet());
+            Collections.sort(l,(e1,e2)->{
+            	int res=Integer.compare(e2.getValue(), e1.getValue());
+            	if (res ==0) {
+            			res = e1.getKey().compareTo(e2.getKey());
+            	}
+            	return res ;
+            });
             System.out.println("Total words: " + totalWords);
             System.out.println("Unique words: " + map.size());
+            for (int i = 0; i < 5; i++) {
+                Map.Entry<String, Integer> e = l.get(i);
+                System.out.println(e.getKey() + " : " + e.getValue());
+            }
 
             
             // TODO : extraire le map dans une ArrayList
@@ -105,15 +160,33 @@ public class WordFrequency {
                 String word = cleanWord(scanner.next());
                 if (!word.isEmpty()) {
                     totalWords++;
-                    // TODO : mettre à jour la map
+                    map.put(word, map.getOrDefault(word, 0) + 1);
                 }
             }
             System.out.println("Total words: " + totalWords);
             System.out.println("Unique words: " + map.size());
 
-            // TODO : extraire le map dans une ArrayList
-            // trier la liste par fréquence décroissante puis ordre alphabétique croissant
-        	// puis afficher les 5 mots les plus fréquents avec leur fréquence
+         // 1. Extraire les entrées de la map dans une liste
+            List<Map.Entry<String, Integer>> l = new ArrayList<>(map.entrySet());
+
+            // 2. Trier la liste
+            Collections.sort(l, (e1, e2) -> {
+                // Comparaison des fréquences (décroissant)
+                int res = e2.getValue().compareTo(e1.getValue());
+                
+                // Si même fréquence, tri alphabétique (croissant)
+                if (res == 0) {
+                    res = e1.getKey().compareTo(e2.getKey());
+                }
+                return res;
+            });
+
+            // 3. Afficher les 5 premiers
+            System.out.println("--- Top 5 ---");
+            int limit = Math.min(5, l.size());
+            for (int i = 0; i < limit; i++) {
+                System.out.println(l.get(i).getKey() + " : " + l.get(i).getValue());
+            }
 
         } else {
             System.err.println("Unknown mode '" + mode + "'. Supported modes: count, list, listfreq, tree, hash");
