@@ -17,7 +17,7 @@ class FileUtils {
 
   /**
    * Partitions the file into approximately equal byte ranges, adjusted to word
-   * boundaries.
+  * boundaries.
    *
    * @param f        the file to partition
    * @param numParts number of parts
@@ -36,12 +36,12 @@ class FileUtils {
         long approx = partSize * i;
         raf.seek(approx);
 
-        // Skip forward to the next word boundary (non-letter)
+        // Skip forward to the next token boundary (whitespace)
         while (raf.getFilePointer() < size) {
           int c = raf.read();
           if (c == -1)
             break;
-          if (!Character.isLetter(c)) {
+          if (Character.isWhitespace(c)) {
             offsets[i] = raf.getFilePointer();
             break;
           }
