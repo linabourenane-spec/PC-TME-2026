@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class WordFrequency {
 
@@ -60,7 +62,163 @@ public class WordFrequency {
         }
       }
       printResults(totalWords, map);
-    } else {
+    }else if (mode.equals("naive")) {
+    	
+    	long [] parts =FileUtils.partition(file,numThreads );
+    	Map<String,Integer> sharedMap=new HashMap<>();
+    	long []totalWords=new long[1];
+    	Thread[] t=new Thread[numThreads];
+    	for (int i=0;i<numThreads;i++) {
+    		t[i]=new Thread (new NaiveWorker(file,parts[i],parts[i+1],sharedMap,totalWords));
+    		t[i].start();
+    	}
+    	for (Thread k : t ) {
+    		try {
+    			k.join();
+    		} catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+    		
+    	}		
+    		printResults(totalWords[0], sharedMap);
+    		
+    		
+
+
+    	
+    			
+    	
+    	
+    } else if (mode.equals("naive2")) {
+        final long[] parts = FileUtils.partition(file, numThreads);
+        final Map<String, Integer> sharedMap = new HashMap<>();
+        final long[] totalWords = new long[1]; // "final" pour être capturé par la lambda
+
+        Thread[] threads = new Thread[numThreads];
+
+        for (int i = 0; i < numThreads; i++) {
+            final int id = i; // On crée une variable finale pour l'indice
+            
+            // On définit le Runnable directement avec une Lambda
+            threads[i] = new Thread(() -> {
+                try (Scanner sc = new Scanner(FileUtils.getRange(file, parts[id], parts[id+1]))) {
+                    while (sc.hasNext()) {
+                        String word = cleanWord(sc.next());
+                        if (!word.isEmpty()) {
+                            totalWords[0]++; // Capture automatique
+                            sharedMap.compute(word, (w, c) -> c == null ? 1 : c + 1); // Capture automatique
+                        }
+                    }
+                } catch (IOException e) { e.printStackTrace(); }
+            });
+            threads[i].start();
+        }
+
+        for (Thread t : threads) {
+            try { t.join(); } catch (InterruptedException e) { e.printStackTrace(); }
+        }
+        printResults(totalWords[0], sharedMap);
+
+
+     // ... dans le main ...
+     } else if (mode.equals("atomic")) {
+         final long[] parts = FileUtils.partition(file, numThreads);
+         final Map<String, Integer> sharedMap = new HashMap<>();
+         
+         // On remplace le tableau long[1] par un AtomicInteger
+         final AtomicInteger atomicTotal = new AtomicInteger(0);
+
+         Thread[] threads = new Thread[numThreads];
+
+         for (int i = 0; i < numThreads; i++) {
+             final int id = i;
+             threads[i] = new Thread(() -> {
+                 try (Scanner sc = new Scanner(FileUtils.getRange(file, parts[id], parts[id+1]))) {
+                     while (sc.hasNext()) {
+                         String word = cleanWord(sc.next());
+                         if (!word.isEmpty()) {
+                             // Incrémentation sûre (Thread-safe)
+                             atomicTotal.incrementAndGet(); 
+                             
+                             // TOUJOURS PAS SÛR (Data Race sur la Map)
+                             sharedMap.compute(word, (w, c) -> c == null ? 1 : c + 1);
+                         }
+                     }
+                 } catch (IOException e) { e.printStackTrace(); }
+             });
+             threads[i].start();
+         }
+
+         for (Thread t : threads) {
+             try { t.join(); } catch (InterruptedException e) { e.printStackTrace(); }
+         }
+         
+         // On récupère la valeur finale avec .get()
+         printResults(atomicTotal.get(), sharedMap);
+ }else if (mode.equals("synchronized")) {
+   	  final long[] parts = FileUtils.partition(file, numThreads); 
+   	  Thread[] t=new Thread [numThreads] ;
+   	  final Map<String, Integer> sharedMap = new HashMap<>();
+   	  final AtomicLong atomicTotal = new AtomicLong(0);
+   	  for (int i =0;i<numThreads;i++) {
+   		  int id = i ;
+          t[i] = new Thread(() -> {
+              try (Scanner sc = new Scanner(FileUtils.getRange(file, parts[id], parts[id+1]))) {
+                  while (sc.hasNext()) {
+                      String word = cleanWord(sc.next());
+                      
+                      if (!word.isEmpty()) {
+                    	  synchronized(sharedMap) {
+                          // Incrémentation sûre (Thread-safe)
+                          atomicTotal.incrementAndGet(); 
+                          
+                          // TOUJOURS PAS SÛR (Data Race sur la Map)
+                          sharedMap.compute(word, (w, c) -> c == null ? 1 : c + 1);
+                    	  }
+                      }
+                  }
+              } catch (IOException e) { e.printStackTrace(); }
+          });
+          t[i].start();
+   	  }
+          for (Thread k : t) {
+        	  try { k.join(); } catch (InterruptedException e) { e.printStackTrace(); }
+        	  
+   			 
+ }
+          printResults(atomicTotal.get(), sharedMap);
+ } else if (mode.equals("decorated")) {
+	    final long[] parts = FileUtils.partition(file, numThreads);
+	    
+	    // On décore la HashMap pour la rendre thread-safe
+	    final Map<String, Integer> sharedMap = Collections.synchronizedMap(new HashMap<>());
+	    final AtomicLong atomicTotal = new AtomicLong(0);
+
+	    Thread[] threads = new Thread[numThreads];
+	    for (int i = 0; i < numThreads; i++) {
+	        final int id = i;
+	        threads[i] = new Thread(() -> {
+	            try (Scanner sc = new Scanner(FileUtils.getRange(file, parts[id], parts[id+1]))) {
+	                while (sc.hasNext()) {
+	                    String word = cleanWord(sc.next());
+	                    if (!word.isEmpty()) {
+	                        atomicTotal.incrementAndGet();
+	                        // Pas besoin de bloc synchronized ici !
+	                        // La Map décorée s'occupe elle-même de la synchronisation interne.
+	                        sharedMap.compute(word, (w, c) -> c == null ? 1 : c + 1);
+	                    }
+	                }
+	            } catch (IOException e) { e.printStackTrace(); }
+	        });
+	        threads[i].start();
+	    }
+	    for (Thread t : threads) {
+	        try { t.join(); } catch (InterruptedException e) { e.printStackTrace(); }
+	    }
+	    printResults(atomicTotal.get(), sharedMap);
+	}
+    
+    else {
       System.err.println("Unknown mode: " + mode);
       System.exit(1);
     }
@@ -88,7 +246,8 @@ public class WordFrequency {
     }
   }
 
-  private static String cleanWord(String word) {
+
+  static String cleanWord(String word) {
     return word.replaceAll("[^a-zA-Z]", "").toLowerCase();
   }
 }
