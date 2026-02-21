@@ -10,9 +10,30 @@ public class Philosopher implements Runnable {
 	}
 
 	public void run() {
-		// TODO
-		
-		// System.out.println(Thread.currentThread().getName() + " has one fork");
+		while (! Thread.currentThread().isInterrupted()) {
+			think();
+			if (Thread.currentThread().isInterrupted()) break;
+
+			boolean hasLeft = false;
+			boolean hasRight = false;
+
+			try {
+				left.acquire();
+				hasLeft = true;
+				System.out.println(Thread.currentThread().getName() + " has one fork");
+
+				right.acquire();
+				hasRight = true;
+				System.out.println(Thread.currentThread().getName() + " has two forks");
+
+				eat();
+			} finally {
+				if (hasRight)
+					right.release();
+				if (hasLeft)
+					left.release();
+			}
+		}
 	}
 
 	private void eat() {
