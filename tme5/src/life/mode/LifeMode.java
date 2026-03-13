@@ -39,5 +39,5 @@ public interface LifeMode {
 	 *                      implementations may ignore it (e.g. if refresh is externally paced)
 	 * @param workers requested number of updater threads; ignored by modes that only use a single updater
 	 */
-	void start(LifeModel model, LifePanel panel, AtomicInteger updateDelayMs, AtomicInteger refreshDelayMs, int workers);
+	void startSimulation(LifeModel model, LifePanel panel, AtomicInteger updateDelayMs, AtomicInteger refreshDelayMs, int workers);
 }

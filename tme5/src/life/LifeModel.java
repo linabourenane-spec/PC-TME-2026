@@ -17,6 +17,7 @@ public class LifeModel {
 
 	private final AtomicInteger updateCount = new AtomicInteger(0);
 	private final AtomicInteger refreshCount = new AtomicInteger(0);
+	private volatile boolean [][] resetTo = null;
 
 	public LifeModel(int rows, int cols) {
 		if (rows <= 0 || cols <= 0) {
@@ -70,13 +71,27 @@ public class LifeModel {
 	 * Current state becomes one step further in simulation.
 	 */
 	public void refreshCurrent() {
-		for (int r = 0; r < rows; r++) {
-			for (int c = 0; c < cols; c++) {
-				current[r][c] = next[r][c];
+		if (resetTo != null) {
+			// If resetTo is set, copy from it instead of next.
+			// This allows us to reset the simulation to a known state (e.g. for testing).
+			for (int r = 0; r < rows; r++) {
+				for (int c = 0; c < cols; c++) {
+					current[r][c] = resetTo[r][c];
+				}
 			}
+			resetTo = null;
+			refreshCount.set(0);
+			updateCount.set(0);
+		} else {
+			// Normal case: copy from next.
+			for (int r = 0; r < rows; r++) {
+				for (int c = 0; c < cols; c++) {
+					current[r][c] = next[r][c];
+				}
+			}
+			// for ui : count number of calls
+			refreshCount.incrementAndGet();
 		}
-		// for ui : count number of calls
-		refreshCount.incrementAndGet();
 	}
 
 	// Accessors to query and set/modify state.
@@ -136,4 +151,9 @@ public class LifeModel {
 		}
 		return count;
 	}
+
+	public void updateFrom(LifeModel mcopy) {
+		resetTo = mcopy.current.clone();
+	}
+	
 }

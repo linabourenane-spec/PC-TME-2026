@@ -132,10 +132,13 @@ public final class GameOfLifeApp {
 		JSlider refreshSlider = new JSlider(SLIDER_MIN_MS, SLIDER_MAX_MS, refreshDelayMs.get());
 		JSlider aliveSlider = new JSlider(0, 100, SLIDER_DEFAULT_ALIVE_PCT);
 
-		JButton resetRandom = new JButton("Random reset");
+		JButton resetRandom = new JButton("Randomize");
 		resetRandom.addActionListener(e -> {
 			double p = aliveProbabilityPct.get() / 100.0;
-			Scenes.seedRandom(model, p);
+			// Work in a clean copy to avoid interleaving with threads.
+			LifeModel mcopy = new LifeModel(model.getRows(), model.getCols());
+			Scenes.seedRandom(mcopy, p);
+			model.updateFrom(mcopy);
 			panel.repaint();
 		});
 
@@ -148,7 +151,7 @@ public final class GameOfLifeApp {
 				aliveProbabilityPct.set(aliveSlider.getValue());
 				updateLabel.setText("Grid Update delay: " + updateDelayMs.get() + " ms (" + delayFpsLabel(updateDelayMs.get()) + ")");
 				refreshLabel.setText("Screen Refresh delay: " + refreshDelayMs.get() + " ms (" + delayFpsLabel(refreshDelayMs.get()) + ")");
-				resetRandom.setText("Reset (alive: " + aliveProbabilityPct.get() + "%)");
+				resetRandom.setText("Randomize (alive: " + aliveProbabilityPct.get() + "%)");
 			}
 		};
 		updateSlider.addChangeListener(listener);
@@ -156,9 +159,11 @@ public final class GameOfLifeApp {
 		aliveSlider.addChangeListener(listener);
 		listener.stateChanged(null); // initialize labels
 
-		JButton resetScene = new JButton("Reset scene");
+		JButton resetScene = new JButton("Reset default");
 		resetScene.addActionListener(e -> {
-			Scenes.seedDemoScene(model);
+			LifeModel mcopy = new LifeModel(model.getRows(), model.getCols());
+			Scenes.seedDemoScene(mcopy);
+			model.updateFrom(mcopy);
 			panel.repaint();
 		});
 
