@@ -11,8 +11,11 @@ import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
 
 public class Renderer {
+	// On crée un pool avec un nombre de threads fixe (par ex. le nombre de cœurs de ton PC)
+	private static ThreadPool pool = new ThreadPool(Runtime.getRuntime().availableProcessors());
     private static final float GLOBAL_ILLUMINATION = 0.3F;
     private static final float SKY_EMISSION = 0.5F;
     private static final int MAX_REFLECTION_BOUNCES = 5;
@@ -28,23 +31,144 @@ public class Renderer {
      * @param resolution (Floating point greater than 0 and lower or equal to 1) Controls the number of rays traced. (1 = Every pixel is ray-traced)
      */
     public static void renderScene(Scene scene, Graphics gfx, int width, int height, float resolution) {
+        // C'est ici qu'on choisit la version à tester. 
+        // Pour l'instant, décommente celle que tu veux utiliser :
+        
+    	renderSceneThreadPerPixel(scene, gfx, width, height, resolution);
+        // renderSceneThreadPerPixel(scene, gfx, width, height, resolution);
+    }
+    public static void renderSceneSequential(Scene scene, Graphics gfx, int width, int height, float resolution) {
         int blockSize = (int) (1 / resolution);
         long start = System.currentTimeMillis();
 
-        
-        for (int x = 0; x<width; x+=blockSize) {
-            for (int y = 0; y<height; y+=blockSize) {
-                float[] uv = getNormalizedScreenCoordinates(x, y, width, height);
-                PixelData pixelData = computePixelInfo(scene, uv[0], uv[1]);
-
-                gfx.setColor(pixelData.getColor().toAWTColor());
-                gfx.fillRect(x, y, blockSize, blockSize);
+        for (int x = 0; x < width; x += blockSize) {
+            for (int y = 0; y < height; y += blockSize) {
+                drawPixel(scene, gfx, x, y, blockSize, width, height);
             }
         }
 
-        System.out.println("Rendered in " + (System.currentTimeMillis() - start) + "ms");
+        System.out.println("Séquentiel - Rendered in " + (System.currentTimeMillis() - start) + "ms");
     }
 
+
+    public static void renderScenePoolCol(Scene scene, Graphics gfx, int width, int height, float resolution) {
+        int blockSize = (int) (1 / resolution);
+        long start = System.currentTimeMillis();
+
+        // 1. Calculer le nombre de tâches à effectuer
+        int nbColonnes = 0;
+        for (int x = 0; x < width; x += blockSize) nbColonnes++;
+
+        // 2. Initialiser le verrou avec ce nombre 
+        CountDownLatch latch = new CountDownLatch(nbColonnes);
+
+        for (int x = 0; x < width; x += blockSize) {
+            final int fx = x;
+            
+            pool.execute(() -> {
+                try {
+                    for (int y = 0; y < height; y += blockSize) {
+                        drawPixel(scene, gfx, fx, y, blockSize, width, height);
+                    }
+                } finally {
+                    // 3. Chaque tâche signale qu'elle a fini 
+                    latch.countDown();
+                }
+            });
+        }
+
+        try {
+            // 4. Le thread principal attend que le compteur arrive à 0 
+            latch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("PoolCol Final - Rendered in " + (System.currentTimeMillis() - start) + "ms");
+    }
+    public static void renderScenePoolColV2(Scene scene, Graphics gfx, int width, int height, float resolution) {
+        int blockSize = (int) (1 / resolution);
+        long start = System.currentTimeMillis();
+
+  
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+        int nbColonnes = 0;
+        for (int x = 0; x < width; x += blockSize) nbColonnes++;
+        CountDownLatch latch = new CountDownLatch(nbColonnes);
+
+        for (int x = 0; x < width; x += blockSize) {
+            final int fx = x;
+            pool.execute(() -> {
+                try {
+                    for (int y = 0; y < height; y += blockSize) {
+
+                        float[] uv = getNormalizedScreenCoordinates(fx, y, width, height);
+                        PixelData pixelData = computePixelInfo(scene, uv[0], uv[1]);
+                        
+
+                        fillColorRect(image, fx, y, blockSize, blockSize, pixelData.getColor());
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        try {
+            latch.await(); // Attente de la fin du calcul
+            // 2. Un seul appel de dessin final à l'écran
+            gfx.drawImage(image, 0, 0, null);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("PoolCol V2 (Buffer) - Rendered in " + (System.currentTimeMillis() - start) + "ms");
+    }
+
+
+    public static void renderSceneThreadPerPixel(Scene scene, Graphics gfx, int width, int height, float resolution) {
+        int blockSize = (int) (1 / resolution);
+        long start = System.currentTimeMillis();
+        
+        // Liste pour garder une trace de tous nos threads
+        java.util.List<Thread> threads = new java.util.ArrayList<>();
+
+        for (int x = 0; x < width; x += blockSize) {
+            for (int y = 0; y < height; y += blockSize) {
+                // ÉTAPE CRUCIALE : copier x et y dans des variables finales 
+                final int fx = x;
+                final int fy = y;
+
+                // Création d'une tâche (Runnable) qui dessine UN pixel
+                Thread t = new Thread(() -> {
+                    drawPixel(scene, gfx, fx, fy, blockSize, width, height);
+                });
+                
+                threads.add(t); // On l'ajoute à la liste
+                t.start();      // On lance le calcul en parallèle [cite: 88]
+            }
+        }
+
+        // ÉTAPE CRUCIALE : Attendre que TOUS les threads aient fini 
+        for (Thread t : threads) {
+            try {
+                t.join(); 
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        System.out.println("ThreadPerPixel - Rendered in " + (System.currentTimeMillis() - start) + "ms");
+    }
+    private static void drawPixel(Scene scene, Graphics gfx, int x, int y, int blockSize, int width, int height) {
+        float[] uv = getNormalizedScreenCoordinates(x, y, width, height);
+        PixelData pixelData = computePixelInfo(scene, uv[0], uv[1]);
+        synchronized(gfx) {
+        gfx.setColor(pixelData.getColor().toAWTColor());
+        gfx.fillRect(x, y, blockSize, blockSize);
+    }
+    }
     /** Same as the above but applies Post-Processing effects before drawing. */
     public static void renderScenePostProcessed(Scene scene, Graphics gfx, int width, int height, float resolution) {
         int bufferWidth = Math.round(width*resolution+0.49F);
@@ -97,6 +221,38 @@ public class Renderer {
             return new PixelData(Color.BLACK, Float.POSITIVE_INFINITY, 0);
         }
     }
+    public static void renderSceneThreadPerCol(Scene scene, Graphics gfx, int width, int height, float resolution) {
+        int blockSize = (int) (1 / resolution);
+        long start = System.currentTimeMillis();
+        java.util.List<Thread> threads = new java.util.ArrayList<>();
+
+        // Boucle sur les colonnes (X)
+        for (int x = 0; x < width; x += blockSize) {
+            final int fx = x; // On capture l'indice de la colonne
+
+            Thread t = new Thread(() -> {
+                // CHAQUE THREAD s'occupe de toute sa colonne (Y)
+                for (int y = 0; y < height; y += blockSize) {
+                    drawPixel(scene, gfx, fx, y, blockSize, width, height);
+                }
+            });
+            
+            threads.add(t);
+            t.start();
+        }
+
+        // On attend que toutes les colonnes soient finies
+        for (Thread t : threads) {
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        System.out.println("ThreadPerCol - Rendered in " + (System.currentTimeMillis() - start) + "ms");
+    }
+ 
 
     private static PixelData computePixelInfoAtHit(Scene scene, RayHit hit, int recursionLimit) {
         Vector3 hitPos = hit.getPosition();
